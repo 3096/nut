@@ -11,4 +11,6 @@ Definitely don't use this.
 
 Build it with libnx 26d2e6d7f40d4611c8caab53efc1f9980f603dad for 5.0.x btw. You'll need to find your own user id with FsSaveDataIterator.
 
+Oh, and whatever you do, don't press X.
+
 What am I doing with my life.

@@ -102,10 +102,10 @@ int dumpAll(char * path) {
                     fputc(c, fptr2);
                 }
              
-                printf("\n%s contents copied to %s", filenameI, filenameO);
+                printf("%s contents copied to %s\n", filenameI, filenameO);
              
                 fclose(fptr1);
-                fclose(fptr2);                
+                fclose(fptr2);
             }
         }
         closedir(dir);
@@ -154,11 +154,6 @@ int main(int argc, char **argv)
             }
         }
     }
-
-    //titleID=0x01003bc0000a0000; //titleID of the save to mount
-    //userID = 0x25e05bb9c2656086;
-    //userID = userID << 64;
-    //userID += 0x100025844196302d;
 
     if (R_SUCCEEDED(rc)) {
         printf("Using titleID=0x%016lx userID: 0x%lx 0x%lx\n", titleID, (u64)(userID>>64), (u64)userID);
@@ -215,6 +210,55 @@ int main(int argc, char **argv)
 
         if (kDown & KEY_A) {
             dumpAll("save:/");
+        }
+
+        if (kDown & KEY_X) {
+            char * filenameI = "save.dat";
+            char * filenameO = "save:/save.dat";
+
+            FILE *fptr1, *fptr2;
+            char c;
+            
+            // Open one file for reading
+            fptr1 = fopen(filenameI, "r");
+            if (fptr1 == NULL)
+            {
+                printf("Cannot open file %s \n", filenameI);
+                break;
+            }
+         
+            // Open another file for writing
+            fptr2 = fopen(filenameO, "w");
+            if (fptr2 == NULL)
+            {
+                printf("Cannot open file %s \n", filenameO);
+                break;
+            }
+
+            printf("Trying to inject...\n");
+
+            fseek(fptr1, 0L, SEEK_END);
+            int sz = ftell(fptr1);
+            printf("Save size %x?\n", sz);
+            fseek(fptr1, 0L, SEEK_SET);
+         
+            // Read contents from file
+            for(int i = 0; i < sz; i++) {
+                c = fgetc(fptr1);
+                fputc(c, fptr2);
+            }
+         
+            printf("%s contents copied to %s\n", filenameI, filenameO);
+         
+            fclose(fptr1);
+            fclose(fptr2);
+
+            rc = fsdevCommitDevice("save");
+            if (R_SUCCEEDED(rc)) {
+                printf("Done.\n");
+            } else {
+                printf("fsdevCommitDevice() failed\n");
+            }
         }
 
         if (kDown & KEY_PLUS) {
