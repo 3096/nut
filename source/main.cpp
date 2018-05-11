@@ -1,8 +1,13 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h> 
 #include <dirent.h>
+#include <fstream>
 
 #include <switch.h>
+
+const char * EXPORT_DIR = "save/";
+const char * INJECT_DIR = "inject/";
 
 //This example shows how to access savedata for (official) applications/games.
 
@@ -44,75 +49,80 @@ int isDirectory(const char *path) {
    return S_ISDIR(statbuf.st_mode);
 }
 
-int dumpAll(char * path) {
+int cpFile(const char * filenameI, const char * filenameO) {
+    remove( filenameO );
+
+    std::ifstream src(filenameI, std::ios::binary);
+    std::ofstream dst(filenameO, std::ios::binary);
+
+    dst << src.rdbuf();
+
+    return 0;
+}
+
+
+int copyAllSave(const char * dev, const char * path, bool isInject) {
     DIR* dir;
     struct dirent* ent;
-    
-    dir = opendir("save:/");//Open the "save:/" directory.
+    char dirPath[0x100];
+    if(isInject) {
+        strcpy(dirPath, INJECT_DIR);
+        strcat(dirPath, path);
+    } else {                    
+        strcpy(dirPath, dev);
+        strcat(dirPath, path);
+    }
+
+    dir = opendir(dirPath);
     if(dir==NULL)
     {
-        printf("Failed to open dir.\n");
+        printf("Failed to open dir: %s\n", dirPath);
         return -1;
     }
     else
     {
-        printf("Dir-listing for 'save:/':\n");
+        printf("Contents from %s:\n", dirPath);
         while ((ent = readdir(dir)))
         {
-            printf("d_name: %s\n", ent->d_name);
+
+            char filename[0x100];
+            strcpy(filename, path);
+            strcat(filename, "/");
+            strcat(filename, ent->d_name);
 
             char filenameI[0x100];
-            char * filenameO = ent->d_name;
-            strcpy(filenameI, path);
-            strcat(filenameI, filenameO);
+            char filenameO[0x100];
+            if(isInject) {
+                strcpy(filenameI, INJECT_DIR);
+                strcat(filenameI, filename);
+
+                strcpy(filenameO, dev);
+                strcat(filenameO, filename);
+            } else {
+                strcpy(filenameI, dev);
+                strcat(filenameI, filename);
+
+                strcpy(filenameO, EXPORT_DIR);
+                strcat(filenameO, filename);
+            }
+
+            printf("Copying %s...\n", filenameI);
 
             if(isDirectory(filenameI)) {
-                //needs to make path here
-                dumpAll(filenameI);
+                mkdir(filenameO, 0700);
+                int res = copyAllSave(dev, filename, isInject);
+                if(res != 0)
+                    return res;
             } else {
-                FILE *fptr1, *fptr2;
-                char c;
-                
-                // Open one file for reading
-                fptr1 = fopen(filenameI, "r");
-                if (fptr1 == NULL)
-                {
-                    printf("Cannot open file %s \n", filenameI);
-                    break;
-                }
-             
-                // Open another file for writing
-                fptr2 = fopen(filenameO, "w");
-                if (fptr2 == NULL)
-                {
-                    printf("Cannot open file %s \n", filenameO);
-                    break;
-                }
-
-                printf("Trying to dump...\n");
-
-                fseek(fptr1, 0L, SEEK_END);
-                int sz = ftell(fptr1);
-                printf("Save size %x?\n", sz);
-                fseek(fptr1, 0L, SEEK_SET);
-             
-                // Read contents from file
-                for(int i = 0; i < sz; i++) {
-                    c = fgetc(fptr1);
-                    fputc(c, fptr2);
-                }
-             
-                printf("%s contents copied to %s\n", filenameI, filenameO);
-             
-                fclose(fptr1);
-                fclose(fptr2);
+                cpFile(filenameI, filenameO);
             }
         }
         closedir(dir);
-        printf("Done.\n");
+        printf("Finished %s.\n", dirPath);
         return 0;
     }
 }
+
 
 int main(int argc, char **argv)
 {
@@ -154,6 +164,12 @@ int main(int argc, char **argv)
             }
         }
     }
+
+    // override titleID and userID here
+    //titleID = 0x01007ef00011e000; 
+    //userID = 0xffffffffffffffff;
+    //userID = userID << 64;
+    //userID += 0xffffffffffffffff;
 
     if (R_SUCCEEDED(rc)) {
         printf("Using titleID=0x%016lx userID: 0x%lx 0x%lx\n", titleID, (u64)(userID>>64), (u64)userID);
@@ -209,55 +225,20 @@ int main(int argc, char **argv)
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
 
         if (kDown & KEY_A) {
-            dumpAll("save:/");
+            mkdir(EXPORT_DIR, 0700);
+            copyAllSave("save:/", ".", false);
+            printf("Dump over.\n");
         }
 
         if (kDown & KEY_X) {
-            char * filenameI = "save.dat";
-            char * filenameO = "save:/save.dat";
+            if( copyAllSave("save:/", ".", true) == 0 ) {
+                rc = fsdevCommitDevice("save");
 
-            FILE *fptr1, *fptr2;
-            char c;
-            
-            // Open one file for reading
-            fptr1 = fopen(filenameI, "r");
-            if (fptr1 == NULL)
-            {
-                printf("Cannot open file %s \n", filenameI);
-                break;
-            }
-         
-            // Open another file for writing
-            fptr2 = fopen(filenameO, "w");
-            if (fptr2 == NULL)
-            {
-                printf("Cannot open file %s \n", filenameO);
-                break;
-            }
-
-            printf("Trying to inject...\n");
-
-            fseek(fptr1, 0L, SEEK_END);
-            int sz = ftell(fptr1);
-            printf("Save size %x?\n", sz);
-            fseek(fptr1, 0L, SEEK_SET);
-         
-            // Read contents from file
-            for(int i = 0; i < sz; i++) {
-                c = fgetc(fptr1);
-                fputc(c, fptr2);
-            }
-         
-            printf("%s contents copied to %s\n", filenameI, filenameO);
-         
-            fclose(fptr1);
-            fclose(fptr2);
-
-            rc = fsdevCommitDevice("save");
-            if (R_SUCCEEDED(rc)) {
-                printf("Done.\n");
-            } else {
-                printf("fsdevCommitDevice() failed\n");
+                if (R_SUCCEEDED(rc)) {
+                    printf("Changes committed.\n");
+                } else {
+                    printf("fsdevCommitDevice() failed: %x\n", rc);
+                }
             }
         }
 

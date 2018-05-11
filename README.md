@@ -1,16 +1,14 @@
 # switch-save-dump-hack-job
 Some nut wack hack job for 5.0.x before Checkpoint works
 
-Don't expect it to work.
+Seriously, y'all just need to wait for Checkpoint...
 
-Don't expect it to work.
+But since I know no one would listen to me and try to use this mess anyway...
 
-Don't expect it to work.
+Here's an update.
 
-Definitely don't use this.
+Save dump now supports games that uses sub folders like botw, and will be saved to `save` by pressing A (will overwrite whatever's already in there.) Pressing X will inject whatever data that's present in `inject` (sometimes doesn't work, not sure why yet, but use at your own risk and always have backups.)
 
-Build it with libnx 26d2e6d7f40d4611c8caab53efc1f9980f603dad for 5.0.x btw. You'll need to find your own user id with FsSaveDataIterator.
+Build it with libnx 26d2e6d7f40d4611c8caab53efc1f9980f603dad for 5.0.x btw. You'll need to find your own user id you get with FsSaveDataIterator.
 
-Oh, and whatever you do, don't press X.
-
-What am I doing with my life.
+What have I done?
