@@ -3,16 +3,14 @@
 #include <stdlib.h> 
 #include <dirent.h>
 #include <fstream>
+#include <vector>
 
 #include <switch.h>
 
 const char * EXPORT_DIR = "save/";
 const char * INJECT_DIR = "inject/";
 
-//This example shows how to access savedata for (official) applications/games.
-
-Result get_save(u64 *titleID, u128 *userID)
-{
+Result getSaveList(std::vector<FsSaveDataInfo> & saveInfoList) {
     Result rc=0;
     FsSaveDataIterator iterator;
     size_t total_entries=0;
@@ -24,20 +22,43 @@ Result get_save(u64 *titleID, u128 *userID)
         return rc;
     }
 
-    while(1) {
-        rc = fsSaveDataIteratorRead(&iterator, &info, 1, &total_entries);//See libnx fs.h.
-        if (R_FAILED(rc) || total_entries==0) break;
+    rc = fsSaveDataIteratorRead(&iterator, &info, 1, &total_entries);//See libnx fs.h.
+    if (R_FAILED(rc))
+        return rc;
+    if (total_entries==0)
+        return MAKERESULT(Module_Libnx, LibnxError_NotFound);
 
-        if (info.SaveDataType == FsSaveDataType_SaveData) {//Filter by FsSaveDataType_SaveData, however note that NandUser can have non-FsSaveDataType_SaveData.
-            *titleID = info.titleID;
-            *userID = info.userID;
-            return 0;
+    for(; R_SUCCEEDED(rc) && total_entries > 0; 
+        rc = fsSaveDataIteratorRead(&iterator, &info, 1, &total_entries)) {
+        if (info.SaveDataType == FsSaveDataType_SaveData) {
+            saveInfoList.push_back(info);
         }
     }
 
     fsSaveDataIteratorClose(&iterator);
 
-    if (R_SUCCEEDED(rc)) return MAKERESULT(Module_Libnx, LibnxError_NotFound);
+    return 0;
+}
+
+Result mountSaveByTitleAndUser(u64 titleID, u128 userID) {
+    Result rc=0;
+    int ret=0;
+    FsFileSystem tmpfs;
+
+    printf("\n\nUsing titleID=0x%016lx userID: 0x%lx 0x%lx\n", titleID, (u64)(userID>>64), (u64)userID);
+
+    rc = fsMount_SaveData(&tmpfs, titleID, userID);//See also libnx fs.h.
+    if (R_FAILED(rc)) {
+        printf("fsMount_SaveData() failed: 0x%x\n", rc);
+        return rc;
+    }
+
+    ret = fsdevMountDevice("save", tmpfs);
+    if (ret==-1) {
+        printf("fsdevMountDevice() failed.\n");
+        rc = ret;
+        return rc;
+    }
 
     return rc;
 }
@@ -123,99 +144,149 @@ int copyAllSave(const char * dev, const char * path, bool isInject) {
     }
 }
 
+Result getTitleName(u64 titleID, char * name) {
+    Result rc=0;
+
+    NsApplicationControlData *buf=NULL;
+    size_t outsize=0;
+
+    NacpLanguageEntry *langentry = NULL;
+
+    buf = (NsApplicationControlData*)malloc(sizeof(NsApplicationControlData));
+    if (buf==NULL) {
+        rc = MAKERESULT(Module_Libnx, LibnxError_OutOfMemory);
+        printf("Failed to alloc mem.\n");
+    }
+    else {
+        memset(buf, 0, sizeof(NsApplicationControlData));
+    }
+
+    if (R_SUCCEEDED(rc)) {
+        rc = nsInitialize();
+        if (R_FAILED(rc)) {
+            printf("nsInitialize() failed: 0x%x\n", rc);
+        }
+    }
+
+    if (R_SUCCEEDED(rc)) {
+        rc = nsGetApplicationControlData(1, titleID, buf, sizeof(NsApplicationControlData), &outsize);
+        if (R_FAILED(rc)) {
+            printf("nsGetApplicationControlData() failed: 0x%x\n", rc);
+        }
+
+        if (outsize < sizeof(buf->nacp)) {
+            rc = -1;
+            printf("Outsize is too small: 0x%lx.\n", outsize);
+        }
+
+        if (R_SUCCEEDED(rc)) {
+            rc = nacpGetLanguageEntry(&buf->nacp, &langentry);
+
+            if (R_FAILED(rc) || langentry==NULL) printf("Failed to load LanguageEntry.\n");
+        }
+
+        if (R_SUCCEEDED(rc)) {
+            memset(name, 0, sizeof(*name));
+            strncpy(name, langentry->name, sizeof(langentry->name));//Don't assume the nacp string is NUL-terminated for safety.
+        }
+
+        nsExit();
+    }
+
+    return rc;
+}
+
+Result getUserNameById(u128 userID, char * username) {
+    Result rc=0;
+
+    AccountProfile profile;
+    AccountUserData userdata;
+    AccountProfileBase profilebase;
+
+    memset(&userdata, 0, sizeof(userdata));
+    memset(&profilebase, 0, sizeof(profilebase));
+
+    rc = accountInitialize();
+    if (R_FAILED(rc)) {
+        printf("accountInitialize() failed: 0x%x\n", rc);
+    }
+
+    if (R_SUCCEEDED(rc)) {
+        rc = accountGetProfile(&profile, userID);
+
+        if (R_FAILED(rc)) {
+            printf("accountGetProfile() failed: 0x%x\n", rc);
+        }
+        
+
+        if (R_SUCCEEDED(rc)) {
+            rc = accountProfileGet(&profile, &userdata, &profilebase);//userdata is otional, see libnx acc.h.
+
+            if (R_FAILED(rc)) {
+                printf("accountProfileGet() failed: 0x%x\n", rc);
+            }
+
+            if (R_SUCCEEDED(rc)) {
+                memset(username,  0, sizeof(*username));
+                strncpy(username, profilebase.username, sizeof(profilebase.username));//Even though profilebase.username usually has a NUL-terminator, don't assume it does for safety.
+            }
+            accountProfileClose(&profile);
+        }
+        accountExit();
+    }
+
+    return rc;
+}
+
+int selectSaveFromList(int & selection, int change,
+    std::vector<FsSaveDataInfo> & saveInfoList, FsSaveDataInfo & info) {
+
+    selection += change;
+    change %= saveInfoList.size();
+    if (selection < 0) {
+        selection += saveInfoList.size();
+    } else if (selection > 0 
+        && static_cast<unsigned int>(selection) >= saveInfoList.size()) {
+        selection -= saveInfoList.size();
+    }
+
+    info = saveInfoList.at(selection);
+    char name[0x201];
+    getTitleName(info.titleID, name);
+    char username[0x21];
+    getUserNameById(info.userID, username);
+    printf("\r                                                                               ");
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+    gfxWaitForVsync();
+    printf("\rSelected: %s \t User: %s", name, username);
+
+    return selection;
+}
+
 
 int main(int argc, char **argv)
 {
+
     Result rc=0;
-    int ret=0;
-
-    DIR* dir;
-    struct dirent* ent;
-
-    FsFileSystem tmpfs;
-    u128 userID=0;
-    bool account_selected=0;
-    u64 titleID=0;
 
     gfxInitDefault();
     consoleInit(NULL);
 
-    //Get the userID for save mounting. To mount common savedata, use FS_SAVEDATA_USERID_COMMONSAVE.
+    std::vector<FsSaveDataInfo> saveInfoList;
 
-    //Try to find savedata to use with get_save() first, otherwise fallback to the above hard-coded TID + the userID from accountGetActiveUser(). Note that you can use either method.
-    //See the account example for getting account info for an userID.
-    //See also the app_controldata example for getting info for a titleID.
-    if (R_FAILED(get_save(&titleID, &userID))) {
-        rc = accountInitialize();
-        if (R_FAILED(rc)) {
-            printf("accountInitialize() failed: 0x%x\n", rc);
-        }
-
-        if (R_SUCCEEDED(rc)) {
-            rc = accountGetActiveUser(&userID, &account_selected);
-            accountExit();
-
-            if (R_FAILED(rc)) {
-                printf("accountGetActiveUser() failed: 0x%x\n", rc);
-            }
-            else if(!account_selected) {
-                printf("No user is currently selected.\n");
-                rc = -1;
-            }
-        }
+    if (R_FAILED(getSaveList(saveInfoList))) {
+        printf("Failed to get save list 0x%x\n", rc);
     }
 
-    // override titleID and userID here
-    //titleID = 0x01007ef00011e000; 
-    //userID = 0xffffffffffffffff;
-    //userID = userID << 64;
-    //userID += 0xffffffffffffffff;
-
-    if (R_SUCCEEDED(rc)) {
-        printf("Using titleID=0x%016lx userID: 0x%lx 0x%lx\n", titleID, (u64)(userID>>64), (u64)userID);
-    }
-
-    if (R_SUCCEEDED(rc)) {
-        rc = fsMount_SaveData(&tmpfs, titleID, userID);//See also libnx fs.h.
-        if (R_FAILED(rc)) {
-            printf("fsMount_SaveData() failed: 0x%x\n", rc);
-        }
-    }
-
-    //You can use any device-name. If you want multiple saves mounted at the same time, you must use different device-names for each one.
-    if (R_SUCCEEDED(rc)) {
-        ret = fsdevMountDevice("save", tmpfs);
-        if (ret==-1) {
-            printf("fsdevMountDevice() failed.\n");
-            rc = ret;
-        }
-    }
-
-    //At this point you can use the mounted device with standard stdio.
-    //After modifying savedata, in order for the changes to take affect you must use: rc = fsdevCommitDevice("save");
-
-    if (R_SUCCEEDED(rc)) {
-        dir = opendir("save:/");//Open the "save:/" directory.
-        if(dir==NULL)
-        {
-            printf("Failed to open dir.\n");
-        }
-        else
-        {
-            printf("Dir-listing for 'save:/':\n");
-            while ((ent = readdir(dir)))
-            {
-                printf("d_name: %s\n", ent->d_name);
-            }
-            closedir(dir);
-            printf("Done.\n");
-        }
-
-        //When you are done with savedata, you can use the below.
-        //Any devices still mounted at app exit are automatically unmounted.
-    }
+    printf("Y'allAreNUTs v0.1\n");
+    printf("Press A to dump save to 'save/'; Press X to inject contents from 'inject/'\n");
+    printf("Press UP and DOWN to select a save; Press PLUS to quit\n\n");
 
     // Main loop
+    int selection = -1;
+    FsSaveDataInfo info;
+    selectSaveFromList(selection, 1, saveInfoList, info);
     while(appletMainLoop())
     {
         //Scan all the inputs. This should be done once for each frame
@@ -224,26 +295,37 @@ int main(int argc, char **argv)
         //hidKeysDown returns information about which buttons have been just pressed (and they weren't in the previous frame)
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
 
+        if (kDown & KEY_UP) {
+            selectSaveFromList(selection, -1, saveInfoList, info);
+        }
+
+        if (kDown & KEY_DOWN) {
+            selectSaveFromList(selection, 1, saveInfoList, info);
+        }
+
         if (kDown & KEY_A) {
+            mountSaveByTitleAndUser(info.titleID, info.userID);
             mkdir(EXPORT_DIR, 0700);
             copyAllSave("save:/", ".", false);
-            printf("Dump over.\n");
+            printf("Dump over.\n\n");
+            fsdevUnmountDevice("save");
         }
 
         if (kDown & KEY_X) {
+            mountSaveByTitleAndUser(info.titleID, info.userID);
             if( copyAllSave("save:/", ".", true) == 0 ) {
                 rc = fsdevCommitDevice("save");
-
                 if (R_SUCCEEDED(rc)) {
-                    printf("Changes committed.\n");
+                    printf("Changes committed.\n\n");
                 } else {
                     printf("fsdevCommitDevice() failed: %x\n", rc);
+                    printf("Try injecting less data maybe?\n\n");
                 }
             }
+            fsdevUnmountDevice("save");
         }
 
         if (kDown & KEY_PLUS) {
-            fsdevUnmountDevice("save");
             break; // break in order to return to hbmenu
         }
 

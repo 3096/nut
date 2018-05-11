@@ -30,13 +30,19 @@ include $(DEVKITPRO)/libnx/switch_rules
 #     - icon.jpg
 #     - <libnx folder>/default_icon.jpg
 #---------------------------------------------------------------------------------
+VERSION_MAJOR := 0
+VERSION_MINOR := 1
+
+APP_TITLE	:=	Y'allAreNUTs
+APP_AUTHOR	:=	3096
+APP_VERSION	:=	${VERSION_MAJOR}.${VERSION_MINOR}
+
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	source
-DATA		:=	data
-INCLUDES	:=	include
+#DATA		:=	data
+#INCLUDES	:=	include
 EXEFS_SRC	:=	exefs_src
-#ROMFS	:=	romfs
 
 #---------------------------------------------------------------------------------
 # options for code generation

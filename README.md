@@ -7,8 +7,8 @@ But since I know no one would listen to me and try to use this mess anyway...
 
 Here's an update.
 
-Save dump now supports games that uses sub folders like botw, and will be saved to `save` by pressing A (will overwrite whatever's already in there.) Pressing X will inject whatever data that's present in `inject` (sometimes doesn't work, not sure why yet, but use at your own risk and always have backups.)
+Now you can use up & down to select a save to dump. All dumps will be saved to `save` by pressing A (will overwrite whatever's already in there.) Pressing X will inject all data that's present in `inject` (sometimes doesn't work due to service being broken on 5.0 and without using it, fsdevCommitDevice() can fail... Use at your own risk and always have backups)
 
-Build it with libnx 26d2e6d7f40d4611c8caab53efc1f9980f603dad for 5.0.x btw. You'll need to find your own user id you get with FsSaveDataIterator.
+Build it with [my fork of libnx](https://github.com/3096/libnx) btw.
 
 What have I done?
