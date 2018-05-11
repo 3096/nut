@@ -13,4 +13,6 @@ Now you can use up & down to select a save to dump. All dumps will be saved to `
 
 Build it with [my fork of libnx](https://github.com/3096/libnx) btw.
 
-This was never meant to be something that I wanted to release, but since nobody knows how to "wait", I had to maker in a bit more proper so it doesn't get too messy too quickly. Hence the name of this homebrew that wasn't meant to be: You guys are nuts!
+This was never meant to be something that I wanted to release, but since nobody knows how to "wait", I had to make it a bit more proper so it doesn't get too messy too quickly. Hence the name of this homebrew that wasn't meant to be: You guys are nuts!
+
+I don't intend on spending any more time on this tool since it's quite unnecessary. If you want to make any improvements, you're welcome to create a pull request.
