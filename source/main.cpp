@@ -7,6 +7,8 @@
 
 #include <switch.h>
 
+#include "../ipswitch/source/console.h"
+
 const char * EXPORT_DIR = "save/";
 const char * INJECT_DIR = "inject/";
 const char * SAVE_DEV = "save";
@@ -185,7 +187,7 @@ int inject() {
     return copyAllSave("save:/", ".", true, NULL);
 }
 
-Result getTitleName(u64 titleID, char * name) {
+Result getTitleName(u64 titleID, char* name, size_t targetBufferLen) {
     Result rc=0;
 
     NsApplicationControlData *buf=NULL;
@@ -228,7 +230,8 @@ Result getTitleName(u64 titleID, char * name) {
 
         if (R_SUCCEEDED(rc)) {
             memset(name, 0, sizeof(*name));
-            strncpy(name, langentry->name, sizeof(langentry->name));//Don't assume the nacp string is NUL-terminated for safety.
+            size_t copyLen = sizeof(langentry->name) > targetBufferLen ? targetBufferLen : sizeof(langentry->name);
+            strncpy(name, langentry->name, copyLen);
         }
 
         nsExit();
@@ -237,7 +240,7 @@ Result getTitleName(u64 titleID, char * name) {
     return rc;
 }
 
-Result getUserNameById(u128 userID, char * username) {
+Result getUserNameById(u128 userID, char* username, size_t targetBufferLen) {
     Result rc=0;
 
     AccountProfile profile;
@@ -268,8 +271,11 @@ Result getUserNameById(u128 userID, char * username) {
             }
 
             if (R_SUCCEEDED(rc)) {
-                memset(username,  0, sizeof(*username));
-                strncpy(username, profilebase.username, sizeof(profilebase.username));//Even though profilebase.username usually has a NUL-terminator, don't assume it does for safety.
+                memset(username, 0, sizeof(*username));
+                size_t copyLen = sizeof(profilebase.username) > targetBufferLen
+                                     ? targetBufferLen
+                                     : sizeof(profilebase.username);
+                strncpy(username, profilebase.username, copyLen);
             }
             accountProfileClose(&profile);
         }
@@ -296,9 +302,9 @@ int selectSaveFromList(int & selection, int change,
     consoleUpdate(NULL);
     if (printName){
         char name[0x201];
-        getTitleName(info.titleID, name);
+        getTitleName(info.titleID, name, sizeof(name));
         char username[0x21];
-        getUserNameById(info.userID, username);
+        getUserNameById(info.userID, username, sizeof(username));
         printf("\rSelected: %s \t User: %s", name, username);
     } else {
         printf("\rSelected titleID: 0x%016lx userID: 0x%lx%lx", 
