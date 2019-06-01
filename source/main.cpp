@@ -293,9 +293,7 @@ int selectSaveFromList(int & selection, int change,
 
     info = saveInfoList.at(selection);
     printf("\r                                                                               ");
-    gfxFlushBuffers();
-    gfxSwapBuffers();
-    gfxWaitForVsync();
+    consoleUpdate(NULL);
     if (printName){
         char name[0x201];
         getTitleName(info.titleID, name);
@@ -338,7 +336,6 @@ int main(int argc, char **argv)
 
     Result rc=0;
 
-    gfxInitDefault();
     consoleInit(NULL);
 
     std::vector<FsSaveDataInfo> saveInfoList;
@@ -435,11 +432,9 @@ int main(int argc, char **argv)
             break; // break in order to return to hbmenu
         }
 
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-        gfxWaitForVsync();
+        consoleUpdate(NULL);
     }
 
-    gfxExit();
+    consoleExit(NULL);
     return 0;
 }
