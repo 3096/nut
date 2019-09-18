@@ -7,8 +7,6 @@
 
 #include <switch.h>
 
-#include "../ipswitch/source/console.h"
-
 const char * EXPORT_DIR = "save/";
 const char * INJECT_DIR = "inject/";
 const char * SAVE_DEV = "save";
@@ -33,7 +31,7 @@ Result getSaveList(std::vector<FsSaveDataInfo> & saveInfoList) {
 
     for(; R_SUCCEEDED(rc) && total_entries > 0; 
         rc = fsSaveDataIteratorRead(&iterator, &info, 1, &total_entries)) {
-        if (info.SaveDataType == FsSaveDataType_SaveData) {
+        if (info.saveDataType == FsSaveDataType_SaveData) {
             saveInfoList.push_back(info);
         }
     }
@@ -353,7 +351,7 @@ int main(int argc, char **argv)
         printf("Failed to get save list 0x%x\n", rc);
     }
 
-    printf("Y'allAreNUTs v0.1.1\n"
+    printf("Y'allAreNUTs v0.1.2\n"
         "Press UP and DOWN to select a save\n"
         "Press LEFT and RIGHT to skip 5 saves\n"
         "Press A to dump save to 'save/'\n"
